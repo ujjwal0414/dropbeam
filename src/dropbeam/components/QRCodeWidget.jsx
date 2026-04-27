@@ -1,4 +1,4 @@
-import { QRCodeSVG } from 'qrcode.react';
+import { QRCodeSVG } from "qrcode.react";
 
 export function QRCodeWidget({ code }) {
   return (
@@ -9,7 +9,7 @@ export function QRCodeWidget({ code }) {
       </div>
       <h2 className="mt-4 font-mono text-3xl font-bold tracking-widest text-indigo-600 dark:text-indigo-400">
         {code}
-      </h2>
+      </h2> 
     </div>
   );
 }
