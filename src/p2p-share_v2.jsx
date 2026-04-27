@@ -1,17 +1,9 @@
-/**
- * DropBeam v2 — WebRTC P2P File Sharing
- * Tailwind-only rewrite: existing logic preserved, CSS block removed.
- * Extra features: display name, clipboard paste, transfer history,
- *   speed meter, ETA, cancel, re-download, file-type icons
- * Responsive: sidebar + main on desktop → stacked on mobile
- */
-
 import { useState, useEffect, useRef, useCallback } from "react";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const PEERJS_CDN = "https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js";
-const CHUNK_SIZE = 64 * 1024; // 64 KB
-const MAX_BUFFER = 1024 * 1024; // 1 MB back-pressure
+const CHUNK_SIZE = 64 * 1024;
+const MAX_BUFFER = 1024 * 1024;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const genCode = () => Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -50,11 +42,7 @@ const loadPeerJS = () =>
     document.head.appendChild(s);
   });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// MAIN COMPONENT
-// ═══════════════════════════════════════════════════════════════════════════
 export function DropBeamv2() {
-  // ── Peer ──────────────────────────────────────────────────────────────────
   const [myCode, setMyCode] = useState("");
   const [peerReady, setPeerReady] = useState(false);
   const [connCode, setConnCode] = useState("");
@@ -62,22 +50,17 @@ export function DropBeamv2() {
   const [connected, setConnected] = useState(false);
   const [peerName, setPeerName] = useState("");
 
-  // ── Name ──────────────────────────────────────────────────────────────────
   const [myName, setMyName] = useState(() => localStorage.getItem("db_name") || "");
   const [editingName, setEditingName] = useState(!localStorage.getItem("db_name"));
 
-  // ── Transfers ─────────────────────────────────────────────────────────────
-  // { id, name, size, mime, progress, done, error, direction, speed, eta, blobUrl }
   const [transfers, setTransfers] = useState([]);
 
-  // ── UI ────────────────────────────────────────────────────────────────────
   const [dragging, setDragging] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("send");
   const [copied, setCopied] = useState(false);
   const [statusMsg, setStatusMsg] = useState("Initializing…");
 
-  // ── History ───────────────────────────────────────────────────────────────
   const [history, setHistory] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("db_history") || "[]");
@@ -86,7 +69,6 @@ export function DropBeamv2() {
     }
   });
 
-  // ── Refs ──────────────────────────────────────────────────────────────────
   const peerRef = useRef(null);
   const incomingRef = useRef({});
   const cancelRef = useRef(new Set());
@@ -102,10 +84,10 @@ export function DropBeamv2() {
     });
   };
 
-  // ── Init ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     const code = genCode();
     setMyCode(code);
+
     (async () => {
       await loadPeerJS();
       const peer = new window.Peer(code, {
@@ -120,6 +102,7 @@ export function DropBeamv2() {
           ],
         },
       });
+
       peer.on("open", () => {
         setPeerReady(true);
         setStatusMsg("Ready");
@@ -128,10 +111,10 @@ export function DropBeamv2() {
       peer.on("error", (e) => setStatusMsg(`Error: ${e.type}`));
       peerRef.current = peer;
     })();
-    return () => peerRef.current?.destroy();
-  }, []); // eslint-disable-line
 
-  // ── Clipboard paste ───────────────────────────────────────────────────────
+    return () => peerRef.current?.destroy();
+  }, []);
+
   useEffect(() => {
     const onPaste = (e) => {
       if (!connected) return;
@@ -141,11 +124,11 @@ export function DropBeamv2() {
         .filter(Boolean);
       if (files.length) sendFiles(files);
     };
+
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
-  }, [connected]); // eslint-disable-line
+  }, [connected]);
 
-  // ── Connection setup ─────────────────────────────────────────────────────
   const setupConn = useCallback(
     (c) => {
       c.on("open", () => {
@@ -154,10 +137,14 @@ export function DropBeamv2() {
         setStatusMsg("Connected");
         c.send({ type: "hello", name: localStorage.getItem("db_name") || myCode });
       });
+
       c.on("data", (data) => {
         if (data.type === "hello") {
           setPeerName(data.name);
-        } else if (data.type === "meta") {
+          return;
+        }
+
+        if (data.type === "meta") {
           const id = `${data.name}_${Date.now()}`;
           incomingRef.current[data.name] = {
             id,
@@ -168,6 +155,7 @@ export function DropBeamv2() {
             received: 0,
             startTime: Date.now(),
           };
+
           setTransfers((p) => [
             {
               id,
@@ -184,46 +172,56 @@ export function DropBeamv2() {
             },
             ...p,
           ]);
-        } else if (data.type === "chunk") {
+          return;
+        }
+
+        if (data.type === "chunk") {
           const e = incomingRef.current[data.name];
           if (!e) return;
           e.chunks.push(data.chunk);
           e.received += data.chunk.byteLength;
+
           const progress = Math.round((e.received / e.size) * 100);
           const elapsed = (Date.now() - e.startTime) / 1000 || 1;
           const speed = e.received / elapsed;
           const eta = Math.ceil((e.size - e.received) / speed);
+
           setTransfers((p) => p.map((t) => (t.id === e.id ? { ...t, progress, speed, eta } : t)));
-        } else if (data.type === "done") {
+          return;
+        }
+
+        if (data.type === "done") {
           const e = incomingRef.current[data.name];
           if (!e) return;
+
           const blob = new Blob(e.chunks, { type: e.mime });
           const blobUrl = URL.createObjectURL(blob);
           const a = document.createElement("a");
           a.href = blobUrl;
           a.download = e.name;
           a.click();
+
           setTransfers((p) =>
             p.map((t) =>
-              t.id === e.id
-                ? { ...t, progress: 100, done: true, speed: 0, eta: null, blobUrl }
-                : t,
+              t.id === e.id ? { ...t, progress: 100, done: true, speed: 0, eta: null, blobUrl } : t,
             ),
           );
           addHistory({ name: e.name, size: e.size, mime: e.mime, direction: "in", time: Date.now() });
           delete incomingRef.current[data.name];
         }
       });
+
       c.on("close", () => {
         setConnected(false);
         setConn(null);
         setPeerName("");
         setStatusMsg("Disconnected");
       });
+
       c.on("error", (e) => setStatusMsg(`Error: ${e}`));
     },
     [myCode],
-  ); // eslint-disable-line
+  );
 
   const connectToPeer = () => {
     if (!peerRef.current || !connCode.trim() || connected) return;
@@ -232,12 +230,13 @@ export function DropBeamv2() {
     setupConn(c);
   };
 
-  // ── Send files ────────────────────────────────────────────────────────────
   const sendFiles = useCallback(
     async (filesToSend) => {
       if (!conn || !connected) return;
+
       for (const file of filesToSend) {
         const id = `${file.name}_${Date.now()}`;
+
         setTransfers((p) => [
           {
             id,
@@ -254,6 +253,7 @@ export function DropBeamv2() {
           },
           ...p,
         ]);
+
         conn.send({ type: "meta", name: file.name, size: file.size, mime: file.type });
         const buffer = await file.arrayBuffer();
         const startTime = Date.now();
@@ -265,10 +265,15 @@ export function DropBeamv2() {
             cancelled = true;
             break;
           }
-          while (conn.dataChannel?.bufferedAmount > MAX_BUFFER) await new Promise((r) => setTimeout(r, 30));
+
+          while (conn.dataChannel?.bufferedAmount > MAX_BUFFER) {
+            await new Promise((r) => setTimeout(r, 30));
+          }
+
           const end = Math.min(offset + CHUNK_SIZE, buffer.byteLength);
           conn.send({ type: "chunk", name: file.name, chunk: buffer.slice(offset, end) });
           offset = end;
+
           const progress = Math.round((offset / buffer.byteLength) * 100);
           const elapsed = (Date.now() - startTime) / 1000 || 1;
           const speed = offset / elapsed;
@@ -280,9 +285,7 @@ export function DropBeamv2() {
           setTransfers((p) => p.map((t) => (t.id === id ? { ...t, error: "Cancelled" } : t)));
         } else {
           conn.send({ type: "done", name: file.name });
-          setTransfers((p) =>
-            p.map((t) => (t.id === id ? { ...t, progress: 100, done: true, speed: 0, eta: null } : t)),
-          );
+          setTransfers((p) => p.map((t) => (t.id === id ? { ...t, progress: 100, done: true, speed: 0, eta: null } : t)));
           addHistory({ name: file.name, size: file.size, mime: file.type, direction: "out", time: Date.now() });
         }
       }
@@ -290,7 +293,6 @@ export function DropBeamv2() {
     [conn, connected],
   );
 
-  // ── Camera ────────────────────────────────────────────────────────────────
   const openCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -312,6 +314,7 @@ export function DropBeamv2() {
     c.height = v.videoHeight;
     c.getContext("2d").drawImage(v, 0, 0);
     c.toBlob((blob) => {
+      if (!blob) return;
       sendFiles([new File([blob], `photo_${Date.now()}.jpg`, { type: "image/jpeg" })]);
       closeCamera();
     }, "image/jpeg", 1.0);
@@ -338,51 +341,46 @@ export function DropBeamv2() {
   const activeXfers = transfers.filter((t) => !t.done && !t.error);
   const doneXfers = transfers.filter((t) => t.done || t.error);
 
-  // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div className="h-[100vh] w-[100vw] bg-[#0d0d14] text-[#e8e8f0] font-sans">
-      <div className="flex min-h-screen flex-col">
-        {/* Header */}
-        <header className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-[#0d0d14] px-5 py-3.5 max-[680px]:px-4">
-          <span className="flex items-center gap-2 text-base font-bold tracking-[-0.02em]">
+    <div className="min-h-dvh w-full bg-[#0d0d14] font-sans text-[#e8e8f0]">
+      <div className="flex min-h-dvh flex-col">
+        <header className="sticky top-0 z-20 flex items-center justify-between border-b border-white/10 bg-[#0d0d14]/95 px-[4vw] py-[1.4dvh] backdrop-blur-sm">
+          <span className="flex min-w-0 items-center gap-2 text-base font-bold tracking-[-0.02em] sm:text-lg">
             <span
-              className={`inline-block h-2 w-2 shrink-0 rounded-full ${peerReady ? "bg-[#39e8a0]" : "bg-[#e8a039] animate-pulse"}`}
+              className={`inline-block h-2 w-2 shrink-0 rounded-full ${peerReady ? "bg-[#39e8a0]" : "animate-pulse bg-[#e8a039]"}`}
             />
-            DropBeam
+            <span className="truncate">DropBeam</span>
           </span>
-          <span className="flex items-center gap-1.5 font-mono text-[11px] text-white/25">
-            <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${connected ? "bg-[#39e8a0] animate-pulse" : "bg-white/25"}`} />
-            {connected ? (peerName ? `↔ ${peerName}` : "Connected") : statusMsg}
+          <span className="flex min-w-0 items-center gap-1.5 font-mono text-[0.72rem] text-white/30 sm:text-xs">
+            <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${connected ? "animate-pulse bg-[#39e8a0]" : "bg-white/25"}`} />
+            <span className="truncate">{connected ? (peerName ? `↔ ${peerName}` : "Connected") : statusMsg}</span>
           </span>
         </header>
 
-        <div className="flex flex-1 overflow-hidden w-[100vw]:flex-col">
-          {/* ── Sidebar ── */}
-          <aside className="flex w-[100vw] md:w-[20vw] shrink-0 flex-col gap-4 overflow-y-auto border-r border-white/10 px-4 py-5 max-[680px]:w-full max-[680px]:flex-row max-[680px]:flex-wrap max-[680px]:gap-3 max-[680px]:border-r-0 max-[680px]:border-b max-[680px]:border-white/10 max-[680px]:p-4 max-[420px]:flex-col">
-            {/* Code */}
-            <section className="rounded-xl  border w-[90vw] md:w-[100%] border-white/10 bg-[#131320] p-3.5">
-              <div className="mb-2.5 font-mono text-[10px] uppercase tracking-[0.15em] text-white/25">Your code</div>
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-mono text-[clamp(18px,4vw,28px)] font-medium tracking-[0.45em] text-[#39e8a0]">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
+          <aside className="grid shrink-0 gap-4 border-b border-white/10 px-[4vw] py-[2.2dvh] sm:grid-cols-2 lg:flex lg:w-[24vw] lg:flex-col lg:border-b-0 lg:border-r lg:border-white/10 lg:px-[2vw] lg:py-[2.5dvh]">
+            <section className="w-full rounded-2xl border border-white/10 bg-[#131320] p-4 shadow-[0_0_0_1px_rgba(255,255,255,0.01)]">
+              <div className="mb-2 font-mono text-[0.68rem] uppercase tracking-[0.16em] text-white/25">Your code</div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-mono text-[clamp(1.15rem,4vw,1.75rem)] font-medium tracking-[0.45em] text-[#39e8a0]">
                   {myCode || "------"}
                 </span>
                 <button
-                  className="whitespace-nowrap rounded-lg border border-white/15 bg-transparent px-2.5 py-1.5 text-[12px] text-white/45 transition hover:border-white/20 hover:text-white/90"
+                  className="whitespace-nowrap rounded-xl border border-white/15 bg-transparent px-3 py-2 text-[0.78rem] text-white/45 transition hover:border-white/20 hover:text-white/90"
                   onClick={copyCode}
                 >
                   {copied ? "✓" : "Copy"}
                 </button>
               </div>
-              <p className="mt-1.5 text-[11px] leading-[1.5] text-white/25">Share with another device to receive files.</p>
+              <p className="mt-2 text-[0.78rem] leading-relaxed text-white/30">Share this with another device to receive files.</p>
             </section>
 
-            {/* Name */}
-            <section className="rounded-xl border w-[90vw] md:w-[100%] border-white/10 bg-[#131320] p-3.5">
-              <div className="mb-2.5 font-mono text-[10px] uppercase tracking-[0.15em] text-white/25">Device name</div>
+            <section className="w-full rounded-2xl border border-white/10 bg-[#131320] p-4">
+              <div className="mb-2 font-mono text-[0.68rem] uppercase tracking-[0.16em] text-white/25">Device name</div>
               {editingName ? (
                 <div className="flex items-center gap-2">
                   <input
-                    className="min-w-0 flex-1 rounded-lg border border-white/15 bg-[#1a1a2a] px-3 py-2.5 font-mono text-[14px] text-[#e8e8f0] outline-none transition focus:border-[#1ab57c] placeholder:text-white/25"
+                    className="min-w-0 flex-1 rounded-xl border border-white/15 bg-[#1a1a2a] px-3 py-2.5 font-mono text-[0.9rem] text-[#e8e8f0] outline-none transition focus:border-[#1ab57c] placeholder:text-white/25"
                     placeholder="e.g. Priya's Phone"
                     value={myName}
                     maxLength={24}
@@ -390,7 +388,7 @@ export function DropBeamv2() {
                     onKeyDown={(e) => e.key === "Enter" && saveName()}
                   />
                   <button
-                    className="whitespace-nowrap rounded-lg border border-white/15 bg-transparent px-3.5 py-2 text-[13px] text-white/45 transition hover:border-white/20 hover:text-white/90"
+                    className="whitespace-nowrap rounded-xl border border-white/15 bg-transparent px-3 py-2 text-[0.8rem] text-white/45 transition hover:border-white/20 hover:text-white/90"
                     onClick={saveName}
                   >
                     Save
@@ -398,9 +396,9 @@ export function DropBeamv2() {
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  <span className="min-w-0 flex-1 text-[14px] font-medium">{myName || myCode}</span>
+                  <span className="min-w-0 flex-1 truncate text-[0.92rem] font-medium">{myName || myCode}</span>
                   <button
-                    className="whitespace-nowrap rounded-lg border border-white/15 bg-transparent px-2.5 py-1.5 text-[12px] text-white/45 transition hover:border-white/20 hover:text-white/90"
+                    className="whitespace-nowrap rounded-xl border border-white/15 bg-transparent px-3 py-2 text-[0.78rem] text-white/45 transition hover:border-white/20 hover:text-white/90"
                     onClick={() => setEditingName(true)}
                   >
                     Edit
@@ -409,15 +407,14 @@ export function DropBeamv2() {
               )}
             </section>
 
-            {/* Connect */}
-            <section className="rounded-xl border w-[90vw] md:w-[100%] border-white/10 bg-[#131320] p-3.5">
-              <div className="mb-2.5 font-mono text-[10px] uppercase tracking-[0.15em] text-white/25">Connect to peer</div>
+            <section className="w-full rounded-2xl border border-white/10 bg-[#131320] p-4">
+              <div className="mb-2 font-mono text-[0.68rem] uppercase tracking-[0.16em] text-white/25">Connect to peer</div>
               {connected ? (
-                <div className="flex items-center gap-2 rounded-lg border border-[#1ab57c] bg-[#1a1a2a] px-3 py-2">
+                <div className="flex items-center gap-2 rounded-xl border border-[#1ab57c] bg-[#1a1a2a] px-3 py-2.5">
                   <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-[#39e8a0] animate-pulse" />
-                  <span className="min-w-0 flex-1 text-[14px]">{peerName || connCode || "Peer"}</span>
+                  <span className="min-w-0 flex-1 truncate text-[0.9rem]">{peerName || connCode || "Peer"}</span>
                   <button
-                    className="whitespace-nowrap rounded-lg border border-white/15 bg-transparent px-2.5 py-1.5 text-[12px] text-white/45 transition hover:border-white/20 hover:text-white/90"
+                    className="whitespace-nowrap rounded-xl border border-white/15 bg-transparent px-3 py-2 text-[0.78rem] text-white/45 transition hover:border-white/20 hover:text-white/90"
                     onClick={() => {
                       conn?.close();
                       setConnected(false);
@@ -431,7 +428,7 @@ export function DropBeamv2() {
                 <>
                   <div className="flex items-center gap-2">
                     <input
-                      className="min-w-0 flex-1 rounded-lg border border-white/15 bg-[#1a1a2a] px-3 py-2.5 font-mono text-[16px] uppercase tracking-[0.3em] text-[#e8e8f0] outline-none transition focus:border-[#1ab57c] placeholder:normal-case placeholder:tracking-normal placeholder:text-white/25"
+                      className="min-w-0 flex-1 rounded-xl border border-white/15 bg-[#1a1a2a] px-3 py-2.5 font-mono text-[0.95rem] uppercase tracking-[0.28em] text-[#e8e8f0] outline-none transition focus:border-[#1ab57c] placeholder:normal-case placeholder:tracking-normal placeholder:text-white/25"
                       placeholder="Enter code"
                       maxLength={6}
                       value={connCode}
@@ -439,47 +436,49 @@ export function DropBeamv2() {
                       onKeyDown={(e) => e.key === "Enter" && connectToPeer()}
                     />
                     <button
-                      className="whitespace-nowrap rounded-lg bg-[#39e8a0] px-4 py-2.5 text-[13px] font-semibold text-black transition hover:bg-[#4ffdb8] disabled:cursor-not-allowed disabled:bg-[#1a1a2a] disabled:text-white/25"
+                      className="whitespace-nowrap rounded-xl bg-[#39e8a0] px-4 py-2.5 text-[0.82rem] font-semibold text-black transition hover:bg-[#4ffdb8] disabled:cursor-not-allowed disabled:bg-[#1a1a2a] disabled:text-white/25"
                       onClick={connectToPeer}
                       disabled={!peerReady || !connCode.trim()}
                     >
                       Link →
                     </button>
                   </div>
-                  <p className="mt-2 text-[11px] leading-[1.5] text-white/25">Same Wi-Fi = fastest. Cross-network works too.</p>
+                  <p className="mt-2 text-[0.78rem] leading-relaxed text-white/30">Same Wi‑Fi is fastest. Cross-network also works.</p>
                 </>
               )}
             </section>
           </aside>
 
-          {/* ── Main ── */}
-          <main className="flex flex-1 flex-col gap-[18px] overflow-y-auto p-5 w-[80vw]:p-3.5">
+          <main className="min-h-0 flex-1 overflow-y-auto px-[4vw] py-[2.2dvh] lg:px-[2.2vw] lg:py-[2.5dvh]">
             {connected ? (
-              <>
-                {/* Tabs */}
+              <div className="flex flex-col gap-5">
                 <div className="flex border-b border-white/10">
-                  {["send", "history"].map((tab) => (
+                  {[
+                    ["send", "Send"],
+                    ["history", "History"],
+                  ].map(([tab, label]) => (
                     <button
                       key={tab}
-                      className={`-mb-px flex items-center gap-1.5 border-b-2 px-4 py-2 text-[14px] transition ${activeTab === tab ? "border-[#39e8a0] text-[#39e8a0]" : "border-transparent text-white/45"}`}
+                      className={`-mb-px flex items-center gap-2 border-b-2 px-4 py-3 text-[0.9rem] transition ${activeTab === tab ? "border-[#39e8a0] text-[#39e8a0]" : "border-transparent text-white/45"}`}
                       onClick={() => setActiveTab(tab)}
                     >
-                      {tab === "send" ? "Send" : "History"}
+                      {label}
                       {tab === "send" && activeXfers.length > 0 && (
-                        <span className="rounded-full bg-[#39e8a0] px-1.5 py-[1px] text-[11px] font-bold text-black">
+                        <span className="rounded-full bg-[#39e8a0] px-2 py-0.5 text-[0.72rem] font-bold text-black">
                           {activeXfers.length}
                         </span>
                       )}
-                      {tab === "history" && history.length > 0 && <span className="text-[11px] text-white/25">{history.length}</span>}
+                      {tab === "history" && history.length > 0 && (
+                        <span className="text-[0.72rem] text-white/25">{history.length}</span>
+                      )}
                     </button>
                   ))}
                 </div>
 
                 {activeTab === "send" && (
                   <>
-                    {/* Drop zone */}
                     <div
-                      className={`flex cursor-pointer flex-col items-center gap-2.5 rounded-xl border-2 border-dashed px-5 py-10 text-center transition ${dragging ? "border-[#1ab57c] bg-[#39e8a0]/5" : "border-white/15 hover:border-[#1ab57c] hover:bg-[#39e8a0]/5"}`}
+                      className={`flex cursor-pointer flex-col items-center gap-3 rounded-2xl border-2 border-dashed px-[5vw] py-[8dvh] text-center transition sm:px-[4vw] ${dragging ? "border-[#1ab57c] bg-[#39e8a0]/5" : "border-white/15 hover:border-[#1ab57c] hover:bg-[#39e8a0]/5"}`}
                       onDragOver={(e) => {
                         e.preventDefault();
                         setDragging(true);
@@ -502,41 +501,44 @@ export function DropBeamv2() {
                           e.target.value = "";
                         }}
                       />
-                      <span className="text-[40px]">{dragging ? "📬" : "📂"}</span>
-                      <span className="text-[15px] font-semibold">Drop files here</span>
-                      <span className="text-[13px] leading-[1.6] text-white/45">
+                      <span className="text-[clamp(2.2rem,5vw,3.2rem)]">{dragging ? "📬" : "📂"}</span>
+                      <span className="text-[1rem] font-semibold sm:text-[1.05rem]">Drop files here</span>
+                      <span className="max-w-[42rem] text-[0.82rem] leading-relaxed text-white/45 sm:text-[0.9rem]">
                         Any format · Any size · Zero compression
                         <br />
-                        <span className="text-white/45/55">or Ctrl+V to paste from clipboard</span>
+                        <span className="text-white/35">or Ctrl+V to paste from clipboard</span>
                       </span>
                     </div>
 
-                    {/* Actions */}
-                    <div className="grid grid-cols-2 gap-2.5 max-[380px]:grid-cols-1">
-                      <button className="flex items-center gap-2.5 rounded-lg border border-white/10 bg-[#1a1a2a] p-3.5 text-[13px] text-white/45 transition hover:border-white/15 hover:text-[#e8e8f0]" onClick={openCamera}>
-                        <span className="text-[22px]">📷</span>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <button
+                        className="flex items-center gap-3 rounded-2xl border border-white/10 bg-[#1a1a2a] p-4 text-[0.85rem] text-white/50 transition hover:border-white/15 hover:text-[#e8e8f0]"
+                        onClick={openCamera}
+                      >
+                        <span className="text-[1.5rem]">📷</span>
                         <span>Camera</span>
                       </button>
-                      <button className="flex items-center gap-2.5 rounded-lg border border-white/10 bg-[#1a1a2a] p-3.5 text-[13px] text-white/45 transition hover:border-white/15 hover:text-[#e8e8f0]" onClick={() => fileInputRef.current?.click()}>
-                        <span className="text-[22px]">🗂</span>
+                      <button
+                        className="flex items-center gap-3 rounded-2xl border border-white/10 bg-[#1a1a2a] p-4 text-[0.85rem] text-white/50 transition hover:border-white/15 hover:text-[#e8e8f0]"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <span className="text-[1.5rem]">🗂</span>
                         <span>Browse</span>
                       </button>
                     </div>
 
-                    {/* Active transfers */}
                     {activeXfers.length > 0 && (
-                      <div className="flex flex-col gap-2">
-                        <div className="mb-0.5 font-mono text-[10px] uppercase tracking-[0.15em] text-white/25">Transferring</div>
+                      <div className="flex flex-col gap-3">
+                        <div className="font-mono text-[0.68rem] uppercase tracking-[0.16em] text-white/25">Transferring</div>
                         {activeXfers.map((t) => (
                           <XCard key={t.id} t={t} onCancel={() => cancelRef.current.add(t.id)} />
                         ))}
                       </div>
                     )}
 
-                    {/* Done */}
                     {doneXfers.length > 0 && (
-                      <div className="flex flex-col gap-2">
-                        <div className="mb-0.5 font-mono text-[10px] uppercase tracking-[0.15em] text-white/25">Completed</div>
+                      <div className="flex flex-col gap-3">
+                        <div className="font-mono text-[0.68rem] uppercase tracking-[0.16em] text-white/25">Completed</div>
                         {doneXfers.map((t) => (
                           <XCard key={t.id} t={t} />
                         ))}
@@ -544,8 +546,8 @@ export function DropBeamv2() {
                     )}
 
                     {transfers.length === 0 && (
-                      <div className="flex flex-col items-center gap-3 px-5 py-12 text-center text-white/25">
-                        <div className="text-[32px]">🚀</div>
+                      <div className="flex flex-col items-center gap-3 px-[4vw] py-[8dvh] text-center text-white/25">
+                        <div className="text-[2rem]">🚀</div>
                         <div>No transfers yet — beam something!</div>
                       </div>
                     )}
@@ -561,40 +563,41 @@ export function DropBeamv2() {
                     }}
                   />
                 )}
-              </>
+              </div>
             ) : (
-              <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-white/15 px-5 py-12 text-center text-white/25">
-                <div className="text-[48px]">📡</div>
-                <strong className="text-[16px] text-[#e8e8f0]">Waiting for connection</strong>
-                <p className="max-w-[300px] text-[13px] leading-[1.6] text-white/45">
-                  Enter a peer&apos;s code in the sidebar, or share yours so they can connect.
+              <div className="flex min-h-[60dvh] flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-white/15 px-[5vw] py-[10dvh] text-center text-white/25">
+                <div className="text-[3rem]">📡</div>
+                <strong className="text-[1rem] text-[#e8e8f0]">Waiting for connection</strong>
+                <p className="max-w-[20rem] text-[0.85rem] leading-relaxed text-white/45">
+                  Enter a peer's code in the sidebar, or share yours so they can connect.
                 </p>
-                {peerReady && (
-                  <div className="mt-2 font-mono text-[22px] tracking-[0.45em] text-[#39e8a0]">
-                    {myCode}
-                  </div>
-                )}
+                {peerReady && <div className="mt-2 font-mono text-[clamp(1.2rem,4vw,2rem)] tracking-[0.45em] text-[#39e8a0]">{myCode}</div>}
               </div>
             )}
           </main>
         </div>
       </div>
 
-      {/* Camera overlay */}
       {cameraOpen && (
-        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-5 bg-black/95 p-5">
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-5 bg-black/95 p-[5vw]">
           <video
             ref={videoRef}
             autoPlay
             playsInline
             muted
-            className="max-h-[62vh] max-w-full rounded-xl border border-white/10"
+            className="max-h-[62dvh] max-w-full rounded-2xl border border-white/10"
           />
-          <div className="flex items-center gap-3">
-            <button className="rounded-lg bg-[#39e8a0] px-7 py-3 text-[15px] font-semibold text-black transition hover:bg-[#4ffdb8]" onClick={capturePhoto}>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <button
+              className="rounded-2xl bg-[#39e8a0] px-7 py-3 text-[0.95rem] font-semibold text-black transition hover:bg-[#4ffdb8]"
+              onClick={capturePhoto}
+            >
               📸 Capture & Send
             </button>
-            <button className="rounded-lg border border-white/15 bg-transparent px-5 py-3 text-[15px] text-white/90 transition hover:border-white/20 hover:text-white" onClick={closeCamera}>
+            <button
+              className="rounded-2xl border border-white/15 bg-transparent px-6 py-3 text-[0.95rem] text-white/90 transition hover:border-white/20 hover:text-white"
+              onClick={closeCamera}
+            >
               Cancel
             </button>
           </div>
@@ -604,35 +607,36 @@ export function DropBeamv2() {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// TRANSFER CARD
-// ═══════════════════════════════════════════════════════════════════════════
 function XCard({ t, onCancel }) {
   const done = t.done;
   const err = !!t.error;
   const live = !done && !err;
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-white/10 bg-[#131320] px-3.5 py-3">
+    <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#131320] px-4 py-3.5">
       <div className="flex items-center gap-2">
-        <span className="shrink-0 text-[20px]">{fileIcon(t.mime)}</span>
-        <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[13px] font-medium" title={t.name}>
+        <span className="shrink-0 text-[1.2rem]">{fileIcon(t.mime)}</span>
+        <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[0.86rem] font-medium" title={t.name}>
           {t.name}
         </span>
         <span
-          className={`shrink-0 rounded px-1.5 py-[2px] text-[11px] font-semibold ${t.direction === "out" ? "bg-[#39e8a0]/10 text-[#39e8a0]" : "bg-[#63a0e8]/10 text-[#63a0e8]"}`}
+          className={`shrink-0 rounded px-1.5 py-0.5 text-[0.72rem] font-semibold ${t.direction === "out" ? "bg-[#39e8a0]/10 text-[#39e8a0]" : "bg-[#63a0e8]/10 text-[#63a0e8]"}`}
         >
           {t.direction === "out" ? "↑ Send" : "↓ Recv"}
         </span>
-        <span className="whitespace-nowrap font-mono text-[11px] text-white/25">{fmtSize(t.size)}</span>
+        <span className="whitespace-nowrap font-mono text-[0.72rem] text-white/25">{fmtSize(t.size)}</span>
         {live && onCancel && (
-          <button className="rounded px-1.5 py-[2px] text-[12px] text-white/25 transition hover:text-[#e86060]" onClick={onCancel} title="Cancel">
+          <button
+            className="rounded px-1.5 py-0.5 text-[0.8rem] text-white/25 transition hover:text-[#e86060]"
+            onClick={onCancel}
+            title="Cancel"
+          >
             ✕
           </button>
         )}
       </div>
 
-      <div className="h-[3px] overflow-hidden rounded-sm bg-[#1a1a2a]">
+      <div className="h-1 overflow-hidden rounded-sm bg-[#1a1a2a]">
         <div
           className={`h-full rounded-sm transition-all duration-300 ${err ? "bg-[#e86060]" : done ? "bg-[#1ab57c]" : "bg-[#39e8a0]"}`}
           style={{ width: `${err ? 100 : t.progress}%` }}
@@ -640,7 +644,7 @@ function XCard({ t, onCancel }) {
       </div>
 
       <div className="flex items-center justify-between gap-3">
-        <span className="font-mono text-[11px] text-white/45">
+        <span className="font-mono text-[0.72rem] text-white/45">
           {live && t.speed > 0 && fmtSpeed(t.speed)}
           {live && t.eta > 0 && ` · ${t.eta}s`}
           {err && <span className="text-[#e86060]">{t.error}</span>}
@@ -650,12 +654,12 @@ function XCard({ t, onCancel }) {
             <a
               href={t.blobUrl}
               download={t.name}
-              className="rounded border border-[#1ab57c] px-2 py-[2px] font-sans text-[11px] text-[#39e8a0] no-underline"
+              className="rounded-lg border border-[#1ab57c] px-2.5 py-1 text-[0.72rem] text-[#39e8a0] no-underline"
             >
               ↓ Again
             </a>
           )}
-          <span className={`font-mono text-[12px] font-medium ${err ? "text-[#e86060]" : done ? "text-[#39e8a0]" : "text-white/45"}`}>
+          <span className={`font-mono text-[0.78rem] font-medium ${err ? "text-[#e86060]" : done ? "text-[#39e8a0]" : "text-white/45"}`}>
             {err ? "Cancelled" : done ? "✓ Done" : `${t.progress}%`}
           </span>
         </div>
@@ -664,14 +668,11 @@ function XCard({ t, onCancel }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// HISTORY TAB
-// ═══════════════════════════════════════════════════════════════════════════
 function HistoryTab({ history, onClear }) {
   if (!history.length)
     return (
-      <div className="flex flex-col items-center gap-3 px-5 py-12 text-center text-white/25">
-        <div className="text-[32px]">📋</div>
+      <div className="flex min-h-[40dvh] flex-col items-center justify-center gap-3 px-[4vw] py-[8dvh] text-center text-white/25">
+        <div className="text-[2rem]">📋</div>
         <div>No history yet.</div>
       </div>
     );
@@ -679,26 +680,26 @@ function HistoryTab({ history, onClear }) {
   return (
     <div>
       <div className="mb-3 flex items-center gap-2">
-        <div className="mb-0 flex-1 font-mono text-[10px] uppercase tracking-[0.15em] text-white/25">Transfer history</div>
+        <div className="flex-1 font-mono text-[0.68rem] uppercase tracking-[0.16em] text-white/25">Transfer history</div>
         <button
-          className="whitespace-nowrap rounded-lg border border-white/15 bg-transparent px-2.5 py-1.5 text-[12px] text-white/45 transition hover:border-white/20 hover:text-white/90"
+          className="whitespace-nowrap rounded-xl border border-white/15 bg-transparent px-3 py-2 text-[0.78rem] text-white/45 transition hover:border-white/20 hover:text-white/90"
           onClick={onClear}
         >
           Clear all
         </button>
       </div>
-      <div className="rounded-xl border border-white/10 bg-[#131320] py-1">
+      <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#131320]">
         {history.map((h, i) => (
-          <div key={i} className="flex items-center gap-2.5 border-b border-white/10 px-3.5 py-2.5 last:border-b-0">
-            <span className="text-[18px]">{fileIcon(h.mime)}</span>
+          <div key={i} className="flex items-center gap-3 border-b border-white/10 px-4 py-3 last:border-b-0">
+            <span className="text-[1.1rem]">{fileIcon(h.mime)}</span>
             <div className="min-w-0 flex-1">
-              <div className="overflow-hidden text-ellipsis whitespace-nowrap text-[13px] font-medium">{h.name}</div>
-              <div className="font-mono text-[11px] text-white/25">
+              <div className="overflow-hidden text-ellipsis whitespace-nowrap text-[0.86rem] font-medium">{h.name}</div>
+              <div className="font-mono text-[0.72rem] text-white/25">
                 {fmtSize(h.size)} · {h.direction === "out" ? "Sent" : "Received"}
               </div>
             </div>
-            <span className="whitespace-nowrap font-mono text-[11px] text-white/25">
-              {new Date(h.time).toLocaleTimeString()}
+            <span className="whitespace-nowrap font-mono text-[0.72rem] text-white/25">
+              {new Date(h.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             </span>
           </div>
         ))}
