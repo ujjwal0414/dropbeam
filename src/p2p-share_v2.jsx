@@ -340,7 +340,7 @@ export function DropBeamv2() {
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen w-[100vw] bg-[#0d0d14] text-[#e8e8f0] font-sans">
+    <div className="h-[100vh] w-[100vw] bg-[#0d0d14] text-[#e8e8f0] font-sans">
       <div className="flex min-h-screen flex-col">
         {/* Header */}
         <header className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-[#0d0d14] px-5 py-3.5 max-[680px]:px-4">
