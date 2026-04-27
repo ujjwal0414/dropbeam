@@ -358,9 +358,9 @@ export function DropBeamv2() {
 
         <div className="flex flex-1 overflow-hidden w-[100vw]:flex-col">
           {/* ── Sidebar ── */}
-          <aside className="flex w-[20vw] shrink-0 flex-col gap-4 overflow-y-auto border-r border-white/10 px-4 py-5 max-[680px]:w-full max-[680px]:flex-row max-[680px]:flex-wrap max-[680px]:gap-3 max-[680px]:border-r-0 max-[680px]:border-b max-[680px]:border-white/10 max-[680px]:p-4 max-[420px]:flex-col">
+          <aside className="flex w-[100vw] md:w-[20vw] shrink-0 flex-col gap-4 overflow-y-auto border-r border-white/10 px-4 py-5 max-[680px]:w-full max-[680px]:flex-row max-[680px]:flex-wrap max-[680px]:gap-3 max-[680px]:border-r-0 max-[680px]:border-b max-[680px]:border-white/10 max-[680px]:p-4 max-[420px]:flex-col">
             {/* Code */}
-            <section className="rounded-xl border border-white/10 bg-[#131320] p-3.5">
+            <section className="rounded-xl  border w-[90vw] md:w-[100%] border-white/10 bg-[#131320] p-3.5">
               <div className="mb-2.5 font-mono text-[10px] uppercase tracking-[0.15em] text-white/25">Your code</div>
               <div className="flex items-center justify-between gap-2">
                 <span className="font-mono text-[clamp(18px,4vw,28px)] font-medium tracking-[0.45em] text-[#39e8a0]">
