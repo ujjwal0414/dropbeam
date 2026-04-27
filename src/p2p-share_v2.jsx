@@ -377,7 +377,7 @@ export function DropBeamv2() {
             </section>
 
             {/* Name */}
-            <section className="rounded-xl border border-white/10 bg-[#131320] p-3.5">
+            <section className="rounded-xl border w-[90vw] md:w-[100%] border-white/10 bg-[#131320] p-3.5">
               <div className="mb-2.5 font-mono text-[10px] uppercase tracking-[0.15em] text-white/25">Device name</div>
               {editingName ? (
                 <div className="flex items-center gap-2">
@@ -410,7 +410,7 @@ export function DropBeamv2() {
             </section>
 
             {/* Connect */}
-            <section className="rounded-xl border border-white/10 bg-[#131320] p-3.5">
+            <section className="rounded-xl border w-[90vw] md:w-[100%] border-white/10 bg-[#131320] p-3.5">
               <div className="mb-2.5 font-mono text-[10px] uppercase tracking-[0.15em] text-white/25">Connect to peer</div>
               {connected ? (
                 <div className="flex items-center gap-2 rounded-lg border border-[#1ab57c] bg-[#1a1a2a] px-3 py-2">
