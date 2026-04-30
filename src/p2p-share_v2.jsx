@@ -366,8 +366,8 @@ export function DropBeamv2() {
         </header>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
-          <aside className="grid shrink-0 gap-4 border-b border-white/10 px-[4vw] py-[2.2dvh] sm:grid-cols-2 lg:flex lg:w-[24vw] lg:flex-col lg:border-b-0 lg:border-r lg:border-white/10 lg:px-[2vw] lg:py-[2.5dvh]">
-            <section className="w-full rounded-2xl border border-white/10 bg-[#131320] p-4 shadow-[0_0_0_1px_rgba(255,255,255,0.01)]">
+          <aside className="grid  w-[100vw] shrink-0 gap-4 border-b border-white/10 px-[4vw] py-[2.2dvh] sm:grid-cols-2 lg:flex lg:w-[24vw] lg:flex-col lg:border-b-0 lg:border-r lg:border-white/10 lg:px-[2vw] lg:py-[2.5dvh]">
+            <section className="w-[100%] mx-auto rounded-2xl border border-white/10 bg-[#131320] p-4 shadow-[0_0_0_1px_rgba(255,255,255,0.01)]">
               <div className="mb-2 font-mono text-[0.68rem] uppercase tracking-[0.16em] text-white/25">Your code</div>
               <div className="flex items-center justify-between gap-3">
                 <span className="font-mono text-[clamp(1.15rem,4vw,1.75rem)] font-medium tracking-[0.45em] text-[#39e8a0]">
