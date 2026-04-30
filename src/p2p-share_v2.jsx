@@ -89,6 +89,11 @@ export function DropBeamv2() {
           iceServers: [
             { urls: "stun:stun.l.google.com:19302" },
             { urls: "stun:global.stun.twilio.com:3478" },
+            {
+              urls:process.env.VITE_TURN_MAIL,
+              username:process.env.VITE_TURN_PASS,
+              credential:process.env.VITE_TURN_USERNAME
+            }
           ],
         },
       });
@@ -98,7 +103,8 @@ export function DropBeamv2() {
         setStatusMsg("Ready");
       });
       peer.on("connection", (c) => setupConn(c));
-      peer.on("error", (e) => setStatusMsg(`Error: ${e.type}`));
+      peer.on("error", (e) => {setStatusMsg(`Error: ${e.type}`);console.log(e);
+      });
       peerRef.current = peer;
     })();
 
