@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import Peer from "peerjs";
 
 // ── Constants ────────────────────────────────────────────────────────────────
-const PEERJS_CDN = "https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js";
 const CHUNK_SIZE = 64 * 1024;
 const MAX_BUFFER = 1024 * 1024;
 
@@ -32,15 +32,6 @@ const fileIcon = (mime = "") => {
   return "📦";
 };
 
-const loadPeerJS = () =>
-  new Promise((res, rej) => {
-    if (window.Peer) return res();
-    const s = document.createElement("script");
-    s.src = PEERJS_CDN;
-    s.onload = res;
-    s.onerror = rej;
-    document.head.appendChild(s);
-  });
 
 export function DropBeamv2() {
   const [myCode, setMyCode] = useState("");
@@ -88,9 +79,8 @@ export function DropBeamv2() {
     const code = genCode();
     setMyCode(code);
 
-    (async () => {
-      await loadPeerJS();
-      const peer = new window.Peer(code, {
+    (() => {
+      const peer = new Peer(code, {
         host: "0.peerjs.com",
         port: 443,
         path: "/",
@@ -113,6 +103,7 @@ export function DropBeamv2() {
     })();
 
     return () => peerRef.current?.destroy();
+
   }, []);
 
   useEffect(() => {
